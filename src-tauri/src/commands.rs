@@ -348,6 +348,20 @@ pub fn copy_text(text: String) -> Result<(), String> {
     winsys::set_clipboard_text(&text)
 }
 
+pub const REPO_URL: &str = "https://github.com/Sulaiman-Dawood/clear";
+
+/// Open the project's GitHub page in the default browser.
+#[tauri::command]
+pub fn open_repo() -> Result<(), String> {
+    #[cfg(windows)]
+    let result = std::process::Command::new("rundll32").args(["url.dll,FileProtocolHandler", REPO_URL]).spawn();
+    #[cfg(target_os = "macos")]
+    let result = std::process::Command::new("open").arg(REPO_URL).spawn();
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let result = std::process::Command::new("xdg-open").arg(REPO_URL).spawn();
+    result.map(|_| ()).map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 pub fn open_config_dir(state: State<'_, AppState>) -> Result<(), String> {
     std::fs::create_dir_all(&state.config_dir).map_err(|e| e.to_string())?;

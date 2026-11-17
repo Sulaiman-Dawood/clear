@@ -544,6 +544,7 @@ function renderAbout(): string {
       ${logo(64)}
       <div class="name">Clear</div>
       <div class="muted">Version ${esc(info.version)} · Select. Shortcut. Better text.</div>
+      <button class="link-btn" data-open-repo title="github.com/Sulaiman-Dawood/clear">${icon("github")}View on GitHub</button>
     </div>
     <div class="caption section-title">Your data</div>
     <div class="card flush">
@@ -810,6 +811,7 @@ document.addEventListener("click", async (e) => {
     return;
   }
   if ("openDir" in d) return void api.openConfigDir();
+  if ("openRepo" in d) return void api.openRepo();
   if ("resetAll" in d) {
     if (!resetArmed) {
       resetArmed = true;

@@ -145,6 +145,7 @@ export const api = {
   clearHistory: () => invoke<void>("clear_history"),
   copyText: (text: string) => invoke<void>("copy_text", { text }),
   openConfigDir: () => invoke<void>("open_config_dir"),
+  openRepo: () => invoke<void>("open_repo"),
   resetAll: () => invoke<AppInfo>("reset_all"),
   openMenu: () => invoke<void>("open_menu_from_settings"),
   showSettings: (section?: string) => invoke<void>("show_settings", { section }),

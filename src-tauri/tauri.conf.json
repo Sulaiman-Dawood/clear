@@ -33,7 +33,7 @@
       {
         "label": "settings",
         "create": false,
-        "title": "Clear Settings",
+        "title": "Clear",
         "url": "settings.html",
         "width": 880,
         "height": 600,

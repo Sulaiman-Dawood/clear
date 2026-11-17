@@ -220,6 +220,7 @@ pub fn run() {
             commands::clear_history,
             commands::copy_text,
             commands::open_config_dir,
+            commands::open_repo,
             commands::reset_all,
             commands::open_menu_from_settings,
             commands::show_settings,

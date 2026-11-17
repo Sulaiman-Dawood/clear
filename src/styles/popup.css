@@ -1,0 +1,537 @@
+@import "./base.css";
+
+/* The window is transparent; the card floats inside a 12px margin so its
+   soft shadow has room. Keep in sync with CARD_MARGIN in popup.rs. */
+html,
+body.popup-body {
+  background: transparent;
+  overflow: hidden;
+}
+
+.popup-root {
+  padding: 12px;
+  width: max-content;
+}
+
+.card {
+  width: 400px;
+  background: var(--color-paper);
+  border-radius: var(--radius-card);
+  box-shadow: 0 0 0 1px var(--color-hairline), var(--shadow-popup);
+  overflow: hidden;
+}
+
+/* Only when the popup first appears, not on every redraw. */
+.card.enter,
+.toast.enter {
+  animation: rise 120ms ease-out;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.985);
+  }
+}
+
+/* ---------- Header ---------- */
+.head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 8px 0 14px;
+  height: 36px;
+  cursor: move;
+}
+
+.head button {
+  cursor: pointer;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+}
+
+.head .badge {
+  height: 20px;
+  font-size: 11px;
+}
+
+.head .icon-btn {
+  width: 24px;
+  height: 24px;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.head .badge {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---------- Command input ---------- */
+.body {
+  padding: 8px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.command {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.command .input {
+  height: 34px;
+  min-height: 34px;
+  padding-top: 6px;
+  padding-bottom: 6px;
+  font-size: 13px;
+  /* The key hints sit on the right, so keep that side clear in both directions. */
+  padding-right: 84px;
+  text-align: start;
+}
+
+.command .hints {
+  position: absolute;
+  right: 8px;
+  display: flex;
+  gap: 3px;
+  pointer-events: none;
+}
+
+.preview {
+  text-align: start;
+  margin: -2px 2px 0;
+  font-size: 12px;
+  color: var(--color-mid-gray);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---------- Action chips ---------- */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--color-hairline);
+  color: var(--color-ink);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 100ms ease, box-shadow 100ms ease;
+}
+
+.chip .icon {
+  width: 13px;
+  height: 13px;
+  color: var(--color-mid-gray);
+}
+
+.chip:hover:not(:disabled),
+.chip:focus-visible {
+  background: var(--color-canvas);
+  box-shadow: inset 0 0 0 1px var(--color-strong-border);
+  outline: none;
+}
+
+.chip:focus-visible {
+  box-shadow: inset 0 0 0 1.5px var(--color-ink);
+}
+
+.chip:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.chip.lang {
+  min-width: 38px;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.chip.more {
+  width: 28px;
+  padding: 0;
+  justify-content: center;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.section .caption {
+  font-size: 11px;
+}
+
+.notice {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 8px 10px;
+  border-radius: var(--radius-nested);
+  background: var(--color-canvas);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.notice .icon {
+  margin-top: 1px;
+}
+
+.notice.error {
+  color: var(--color-ember);
+  background: var(--color-danger-soft);
+}
+
+.notice button {
+  margin-left: auto;
+}
+
+.foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 14px;
+  border-top: 1px solid var(--color-hairline);
+  background: var(--color-surface-alt);
+  font-size: 11px;
+  color: var(--color-mid-gray);
+}
+
+.foot .kbd {
+  margin-right: 4px;
+}
+
+/* ---------- Language picker ---------- */
+.lang-list {
+  max-height: 210px;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 2px;
+  margin: 0 -4px;
+}
+
+.lang-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 28px;
+  padding: 0 8px;
+  font-size: 13px;
+  border: 0;
+  border-radius: var(--radius-nested);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.lang-item:hover,
+.lang-item:focus-visible {
+  background: var(--color-canvas);
+  outline: none;
+}
+
+.lang-item .code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-mid-gray);
+}
+
+/* ---------- Result view ---------- */
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--color-mid-gray);
+}
+
+.tabs {
+  display: inline-flex;
+  padding: 2px;
+  gap: 2px;
+  border-radius: var(--radius-pill);
+  background: var(--color-canvas);
+  align-self: flex-start;
+}
+
+.tab {
+  height: 22px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--color-mid-gray);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.tab.active {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  box-shadow: var(--shadow-card);
+}
+
+/* The output keeps a fixed height; the grip in the corner resizes it. */
+.result-wrap {
+  position: relative;
+  flex: none;
+}
+
+/* The grip sits in the scrollbar's corner: bottom-right for left-to-right
+   text, bottom-left for right-to-left text (where the scrollbar moves left). */
+.grip {
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-small);
+  background: transparent;
+  color: var(--color-mid-gray);
+  cursor: ns-resize;
+  touch-action: none;
+}
+
+.grip:hover {
+  background: var(--color-canvas);
+  color: var(--color-ink);
+}
+
+.grip .icon {
+  width: 14px;
+  height: 14px;
+  stroke-width: 2;
+}
+
+.result-wrap.rtl .grip {
+  right: auto;
+  left: 3px;
+}
+
+.result-wrap.rtl .grip .icon {
+  transform: scaleX(-1);
+}
+
+/* End the scrollbar above the grip, like a window's resize corner. */
+.result::-webkit-scrollbar-track {
+  margin-bottom: 24px;
+}
+
+.result {
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 9px 11px 16px;
+  text-align: start;
+  unicode-bidi: plaintext;
+  border: 0;
+  border-radius: var(--radius-nested);
+  background: var(--color-surface-alt);
+  box-shadow: inset 0 0 0 1px var(--color-hairline);
+  color: var(--color-ink);
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  overflow-y: auto;
+  resize: none;
+  outline: none;
+  user-select: text;
+  cursor: text;
+}
+
+textarea.result:focus {
+  background: var(--color-paper);
+}
+
+/* Loading placeholder shown until the first words arrive. */
+.result.skeleton {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 9px;
+  padding-top: 13px;
+  overflow: hidden;
+}
+
+.result.skeleton span {
+  display: block;
+  height: 10px;
+  border-radius: var(--radius-small);
+  background: linear-gradient(90deg, var(--skeleton-a) 25%, var(--skeleton-b) 45%, var(--skeleton-a) 65%);
+  background-size: 300% 100%;
+  animation: shimmer 1.3s ease-in-out infinite;
+}
+
+.result.skeleton span:nth-child(1) { width: 92%; }
+.result.skeleton span:nth-child(2) { width: 78%; }
+.result.skeleton span:nth-child(3) { width: 86%; }
+.result.skeleton span:nth-child(4) { width: 54%; }
+
+.result.skeleton[dir="rtl"] span {
+  animation-direction: reverse;
+}
+
+@keyframes shimmer {
+  from { background-position: 100% 0; }
+  to { background-position: 0 0; }
+}
+
+/* No grip until there is text, so it never has to switch sides. */
+.result-wrap:has(.skeleton) .grip {
+  display: none;
+}
+
+.result del {
+  margin-right: 3px;
+  color: var(--color-mid-gray);
+  text-decoration: line-through;
+  text-decoration-color: var(--color-mid-gray);
+}
+
+.result ins {
+  text-decoration: none;
+  background: var(--color-canvas);
+  box-shadow: inset 0 -1.5px 0 var(--color-ink);
+  border-radius: 3px;
+}
+
+.result-meta {
+  min-height: 16px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--color-mid-gray);
+}
+
+.tab:disabled {
+  cursor: default;
+}
+
+.actions-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Compact buttons inside the popup. */
+.card .btn-sm {
+  height: 30px;
+  padding: 0 11px;
+  font-size: 12px;
+}
+
+.card .btn-sm .icon {
+  width: 14px;
+  height: 14px;
+}
+
+.card .kbd {
+  height: 18px;
+  padding: 0 5px;
+  font-size: 10px;
+}
+
+.actions-row .primary-hint {
+  margin-left: 2px;
+  opacity: 0.7;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+/* ---------- Toast ---------- */
+.toast {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 340px;
+  min-height: 44px;
+  padding: 10px 16px 10px 12px;
+  background: var(--color-paper);
+  border-radius: var(--radius-pill);
+  box-shadow: 0 0 0 1px var(--color-hairline), var(--shadow-popup);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.toast .tile {
+  display: inline-flex;
+  flex: none;
+}
+
+.toast.error {
+  align-items: flex-start;
+  border-radius: 16px;
+  cursor: pointer;
+}
+
+.toast.error .msg {
+  color: var(--color-ink);
+  font-weight: 400;
+  line-height: 1.45;
+}
+
+.toast.error .icon {
+  color: var(--color-ember);
+  margin-top: 2px;
+}
+
+.toast .check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--color-ink);
+  color: var(--color-on-ink);
+}
+
+.toast .check .icon {
+  width: 12px;
+  height: 12px;
+  stroke-width: 2.5;
+}
+
+/* "Working" toast: click anywhere on it to cancel. */
+.toast[data-toast-cancel] {
+  cursor: pointer;
+}
+
+.toast-hint {
+  font-size: 11px;
+  font-weight: 400;
+}

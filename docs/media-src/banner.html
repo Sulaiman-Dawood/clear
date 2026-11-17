@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Clear banner</title>
+    <!-- Source for docs/images/banner.png. Open through the dev server
+         (npm run dev, then /docs/media-src/banner.html) at 1280x640. -->
+    <script type="module">
+      import "@fontsource-variable/geist";
+      import "/src/styles/tokens.css";
+      import { logo } from "/src/lib/icons.ts";
+      document.getElementById("logo").innerHTML = logo(64);
+    </script>
+    <style>
+      html,
+      body {
+        margin: 0;
+        width: 1280px;
+        height: 640px;
+        overflow: hidden;
+      }
+
+      body {
+        position: relative;
+        font-family: var(--font-geist);
+        font-feature-settings: "ss01" on, "cv11" on;
+        color: var(--color-ink);
+        background:
+          radial-gradient(900px 520px at 78% 40%, #ffffff 0%, rgba(255, 255, 255, 0) 70%),
+          var(--color-canvas);
+        -webkit-font-smoothing: antialiased;
+      }
+
+      .copy {
+        position: absolute;
+        left: 80px;
+        top: 0;
+        bottom: 0;
+        width: 580px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 18px;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+      }
+
+      .brand h1 {
+        margin: 0;
+        font-size: 64px;
+        font-weight: 600;
+        letter-spacing: -2.4px;
+        line-height: 1;
+      }
+
+      .tagline {
+        margin: 6px 0 0;
+        font-size: 32px;
+        font-weight: 600;
+        letter-spacing: -0.8px;
+        line-height: 1.15;
+      }
+
+      .lead {
+        margin: 0;
+        font-size: 18px;
+        line-height: 1.5;
+        color: var(--color-mid-gray);
+      }
+
+      .pills {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 6px;
+      }
+
+      .pill {
+        height: 30px;
+        padding: 0 14px;
+        display: inline-flex;
+        align-items: center;
+        border-radius: 18px;
+        background: var(--color-paper);
+        box-shadow: inset 0 0 0 1px var(--color-hairline);
+        font-size: 14px;
+        font-weight: 500;
+      }
+
+      .pill.dark {
+        background: var(--color-ink);
+        color: #fafafa;
+        box-shadow: none;
+      }
+
+      iframe {
+        position: absolute;
+        border: 0;
+        background: transparent;
+        pointer-events: none;
+      }
+
+      #back {
+        left: 746px;
+        top: 36px;
+        width: 484px;
+        height: 400px;
+      }
+
+      #front {
+        left: 640px;
+        top: 214px;
+        width: 484px;
+        height: 400px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="copy">
+      <div class="brand"><span id="logo"></span><h1>Clear</h1></div>
+      <p class="tagline">Better writing in every Windows app.</p>
+      <p class="lead">Select text anywhere and press a shortcut to fix, rewrite or translate it, using your own AI key or a model on your computer.</p>
+      <div class="pills">
+        <span class="pill dark">Bring your own key</span>
+        <span class="pill">Claude, OpenAI, Gemini…</span>
+        <span class="pill">Local models</span>
+      </div>
+    </div>
+    <!-- A dark page in a frame is painted opaque unless the frame says it's dark too. -->
+    <iframe id="back" src="/popup.html?demo=rtl&theme=dark&bg=none" title="" style="color-scheme: dark"></iframe>
+    <iframe id="front" src="/popup.html?demo=fix&theme=light&bg=none" title=""></iframe>
+  </body>
+</html>

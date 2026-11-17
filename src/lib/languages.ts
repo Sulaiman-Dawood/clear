@@ -1,0 +1,43 @@
+// Languages offered for translation. Codes are only used for compact chips.
+export const LANGUAGES: { name: string; code: string }[] = [
+  { name: "English", code: "EN" },
+  { name: "Arabic", code: "AR" },
+  { name: "Spanish", code: "ES" },
+  { name: "French", code: "FR" },
+  { name: "German", code: "DE" },
+  { name: "Italian", code: "IT" },
+  { name: "Portuguese", code: "PT" },
+  { name: "Dutch", code: "NL" },
+  { name: "Swedish", code: "SV" },
+  { name: "Norwegian", code: "NO" },
+  { name: "Danish", code: "DA" },
+  { name: "Finnish", code: "FI" },
+  { name: "Polish", code: "PL" },
+  { name: "Czech", code: "CS" },
+  { name: "Ukrainian", code: "UK" },
+  { name: "Russian", code: "RU" },
+  { name: "Greek", code: "EL" },
+  { name: "Turkish", code: "TR" },
+  { name: "Hebrew", code: "HE" },
+  { name: "Persian", code: "FA" },
+  { name: "Urdu", code: "UR" },
+  { name: "Hindi", code: "HI" },
+  { name: "Bengali", code: "BN" },
+  { name: "Tamil", code: "TA" },
+  { name: "Thai", code: "TH" },
+  { name: "Vietnamese", code: "VI" },
+  { name: "Indonesian", code: "ID" },
+  { name: "Malay", code: "MS" },
+  { name: "Filipino", code: "FIL" },
+  { name: "Chinese (Simplified)", code: "ZH" },
+  { name: "Chinese (Traditional)", code: "ZH-T" },
+  { name: "Japanese", code: "JA" },
+  { name: "Korean", code: "KO" },
+  { name: "Swahili", code: "SW" },
+  { name: "Romanian", code: "RO" },
+  { name: "Hungarian", code: "HU" },
+];
+
+export function languageCode(name: string): string {
+  return LANGUAGES.find((l) => l.name === name)?.code ?? name.slice(0, 2).toUpperCase();
+}

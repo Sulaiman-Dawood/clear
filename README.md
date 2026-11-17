@@ -135,3 +135,7 @@ run `docs/media-src/capture.ps1` to regenerate them.
 | `src/styles/tokens.css` | Colors, type and spacing for light and dark |
 
 Built with [Tauri 2](https://tauri.app), Rust and TypeScript.
+
+## License
+
+[MIT](LICENSE)

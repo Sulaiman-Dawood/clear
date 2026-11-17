@@ -3,6 +3,7 @@ name = "clear"
 version = "1.0.0"
 description = "Clear: select text in any app, press a shortcut, get better text."
 edition = "2021"
+license = "MIT"
 publish = false
 
 [lib]

@@ -127,7 +127,9 @@ pub fn run() {
             for window in app.config().app.windows.clone() {
                 let built = tauri::WebviewWindowBuilder::from_config(app.handle(), &window)?.build()?;
                 if window.label == popup::LABEL {
-                    winsys::make_tool_window(popup::raw_hwnd(&built));
+                    let raw = popup::raw_hwnd(&built);
+                    winsys::make_tool_window(raw);
+                    winsys::remove_window_shadow(raw);
                 }
             }
 

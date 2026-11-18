@@ -509,6 +509,54 @@ mod imp {
         }
     }
 
+    /// Disable native Windows DWM drop shadow and corner rounding on a window.
+    pub fn remove_window_shadow(raw: isize) {
+        if raw == 0 {
+            return;
+        }
+        unsafe {
+            let h = hwnd(raw);
+            extern "system" {
+                fn LoadLibraryW(lpLibFileName: *const u16) -> isize;
+                fn GetProcAddress(hModule: isize, lpProcName: *const u8) -> *const core::ffi::c_void;
+            }
+
+            let dll: Vec<u16> = "dwmapi.dll\0".encode_utf16().collect();
+            let dwm = LoadLibraryW(dll.as_ptr());
+            if dwm != 0 {
+                let func_name = b"DwmSetWindowAttribute\0";
+                let proc = GetProcAddress(dwm, func_name.as_ptr());
+                if !proc.is_null() {
+                    type FnDwmSetWindowAttribute = unsafe extern "system" fn(
+                        hwnd: HWND,
+                        dw_attribute: u32,
+                        pv_attribute: *const core::ffi::c_void,
+                        cb_attribute: u32,
+                    ) -> i32;
+                    let set_attr: FnDwmSetWindowAttribute = std::mem::transmute(proc);
+
+                    // DWMWA_NCRENDERING_POLICY = 2, DWMNCRP_DISABLED = 1
+                    let policy: i32 = 1;
+                    let _ = set_attr(
+                        h,
+                        2,
+                        &policy as *const i32 as *const core::ffi::c_void,
+                        std::mem::size_of::<i32>() as u32,
+                    );
+
+                    // DWMWA_WINDOW_CORNER_PREFERENCE = 33, DWMWCP_DONOTROUND = 1
+                    let corner: i32 = 1;
+                    let _ = set_attr(
+                        h,
+                        33,
+                        &corner as *const i32 as *const core::ffi::c_void,
+                        std::mem::size_of::<i32>() as u32,
+                    );
+                }
+            }
+        }
+    }
+
     pub fn show_no_activate(raw: isize) {
         unsafe {
             let h = hwnd(raw);
@@ -638,6 +686,7 @@ mod imp_other {
     pub fn work_area_at(_: i32, _: i32) -> (i32, i32, i32, i32) { (0, 0, 1440, 900) }
     pub fn set_no_activate(_: isize, _: bool) {}
     pub fn make_tool_window(_: isize) {}
+    pub fn remove_window_shadow(_: isize) {}
     pub fn hide_window(_: isize) {}
     pub fn set_bounds(_: isize, _: i32, _: i32, _: i32, _: i32) {}
     pub struct EditableCheck;

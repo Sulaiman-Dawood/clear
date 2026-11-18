@@ -51,7 +51,7 @@ The installer is about 2 MB, and Clear sits quietly in the system tray.
 
 ## Getting started
 
-1. **Install.** Download `Clear_1.0.0_x64-setup.exe` from the [latest release](../../releases/latest) and run it.
+1. **Install.** Download `Clear_1.1.0_x64-setup.exe` from the [latest release](../../releases/latest) and run it.
    Windows 10 or 11 (64-bit). The installer isn't code-signed yet, so Windows may show a
    SmartScreen warning: choose **More info → Run anyway**.
 2. **Connect a provider.** Settings opens on **AI provider** the first time. Pick a provider, paste

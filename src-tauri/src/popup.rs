@@ -148,6 +148,7 @@ pub fn place_toast(win: &WebviewWindow, anchor: Anchor, width: f64, height: f64)
 
 pub fn show(win: &WebviewWindow, focus: bool) {
     let raw = raw_hwnd(win);
+    winsys::remove_window_shadow(raw);
     if focus {
         winsys::set_no_activate(raw, false);
         let _ = win.show();

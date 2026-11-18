@@ -1,6 +1,6 @@
 [package]
 name = "clear"
-version = "1.0.0"
+version = "1.1.0"
 description = "Clear: select text in any app, press a shortcut, get better text."
 edition = "2021"
 license = "MIT"

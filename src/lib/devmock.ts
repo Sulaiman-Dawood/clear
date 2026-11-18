@@ -104,7 +104,7 @@ export function install(page: "popup" | "settings") {
               { id: "ollama", name: "Ollama (local)", wire: "openAi", baseUrl: "http://localhost:11434/v1", defaultModel: "", needsKey: false, local: true, suggestedModels: [], keyHint: "Runs on this computer" },
             ],
             catalog: sampleOpen.actions,
-            version: "1.0.0",
+            version: "1.1.0",
             configDir: "C:\\Users\\you\\AppData\\Roaming\\app.clear.writer",
             keychainService: "app.clear.writer",
           } satisfies AppInfo;

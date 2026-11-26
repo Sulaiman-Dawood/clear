@@ -198,9 +198,10 @@ pub fn normalize_newlines(text: &str) -> String {
 mod imp {
     use super::*;
     use windows::core::PWSTR;
-    use windows::Win32::Foundation::{CloseHandle, HWND, POINT, RECT};
+    use windows::Win32::Foundation::{CloseHandle, HWND, LPARAM, LRESULT, POINT, RECT, WPARAM};
     use windows::Win32::Graphics::Gdi::{
-        ClientToScreen, GetMonitorInfoW, MonitorFromPoint, MONITORINFO, MONITOR_DEFAULTTONEAREST,
+        ClientToScreen, GetMonitorInfoW, MonitorFromPoint, PatBlt, BLACKNESS, HDC, MONITORINFO,
+        MONITOR_DEFAULTTONEAREST,
     };
     use windows::Win32::System::DataExchange::GetClipboardSequenceNumber;
     use windows::Win32::System::Threading::{
@@ -208,16 +209,21 @@ mod imp {
         PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
     };
     use windows::Win32::UI::Input::KeyboardAndMouse::{
-        GetAsyncKeyState, SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYBD_EVENT_FLAGS,
-        KEYEVENTF_KEYUP, VIRTUAL_KEY, VK_C, VK_CONTROL, VK_INSERT, VK_LMENU, VK_LSHIFT, VK_LWIN,
-        VK_MENU, VK_RMENU, VK_RSHIFT, VK_RWIN, VK_SHIFT, VK_V,
+        GetAsyncKeyState, GetLastInputInfo, SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT,
+        KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP, LASTINPUTINFO, VIRTUAL_KEY, VK_A, VK_C, VK_CONTROL,
+        VK_INSERT, VK_LMENU, VK_LSHIFT, VK_LWIN, VK_MENU, VK_RMENU, VK_RSHIFT, VK_RWIN, VK_SHIFT,
+        VK_V,
     };
     use windows::Win32::UI::WindowsAndMessaging::{
-        BringWindowToTop, GetCursorPos, GetForegroundWindow, GetGUIThreadInfo, GetWindowLongPtrW,
-        GetWindowThreadProcessId, IsIconic, IsWindow, SetForegroundWindow, SetWindowLongPtrW,
-        SetWindowPos, ShowWindow, GUITHREADINFO, GWL_EXSTYLE, HWND_TOPMOST, SWP_NOACTIVATE,
-        SWP_NOMOVE, SWP_NOSIZE, SW_RESTORE, SW_SHOWNOACTIVATE, WS_EX_APPWINDOW, WS_EX_NOACTIVATE,
-        WS_EX_TOOLWINDOW,
+        BringWindowToTop, CallWindowProcW, GetClientRect, GetCursorPos, GetForegroundWindow,
+        GetGUIThreadInfo, GetWindowLongPtrW, GetWindowThreadProcessId, IsIconic, IsWindow,
+        SetForegroundWindow, SetWindowLongPtrW, SetWindowPos, ShowWindow, GUITHREADINFO,
+        GWLP_WNDPROC, GWL_EXSTYLE, GWL_STYLE, HWND_TOPMOST, SWP_FRAMECHANGED, SWP_NOACTIVATE,
+        SWP_NOMOVE, SWP_NOSIZE, SW_RESTORE, SW_SHOW, SW_SHOWNOACTIVATE, WM_ERASEBKGND,
+        WM_NCACTIVATE, WM_NCPAINT, WNDPROC, WS_BORDER, WS_CAPTION, WS_CLIPCHILDREN,
+        WS_CLIPSIBLINGS, WS_DLGFRAME, WS_EX_APPWINDOW, WS_EX_CLIENTEDGE, WS_EX_DLGMODALFRAME,
+        WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_WINDOWEDGE, WS_MAXIMIZEBOX,
+        WS_MINIMIZEBOX, WS_POPUP, WS_SYSMENU, WS_THICKFRAME,
     };
 
     fn hwnd(raw: isize) -> HWND {
@@ -260,7 +266,7 @@ mod imp {
 
     /// In terminals Ctrl+C with nothing selected interrupts the running
     /// program, so we copy with Ctrl+Insert there instead.
-    fn is_terminal(raw: isize) -> bool {
+    pub fn is_terminal_window(raw: isize) -> bool {
         const TERMINALS: &[&str] = &[
             "windowsterminal.exe",
             "wt.exe",
@@ -278,6 +284,20 @@ mod imp {
             "kitty.exe",
         ];
         window_exe(raw).is_some_and(|exe| TERMINALS.contains(&exe.as_str()))
+    }
+
+    pub fn last_input_tick() -> u32 {
+        let mut info = LASTINPUTINFO {
+            cbSize: std::mem::size_of::<LASTINPUTINFO>() as u32,
+            dwTime: 0,
+        };
+        unsafe {
+            if GetLastInputInfo(&mut info).as_bool() {
+                info.dwTime
+            } else {
+                0
+            }
+        }
     }
 
     fn key_down(vk: VIRTUAL_KEY) -> bool {
@@ -337,19 +357,68 @@ mod imp {
     /// The user's clipboard is restored afterwards.
     /// Returns `None` when nothing is selected.
     pub fn capture_selection(target: isize) -> Option<String> {
+        capture_selection_with_timeout(target, Duration::from_millis(350))
+    }
+
+    /// Re-copy the selection to verify the user didn't move away; allows a
+    /// slightly longer timeout since text is expected to be selected.
+    pub fn verify_selection(target: isize) -> Option<String> {
+        capture_selection_with_timeout(target, Duration::from_millis(550))
+    }
+
+    /// Select all text in the active editable input field (Ctrl+A) and copy it
+    /// (Ctrl+C), restoring the user's clipboard afterwards. Leaves all text in
+    /// the field selected so an in-place or Replace paste overwrites it cleanly.
+    /// Returns `None` when the field is empty.
+    pub fn capture_all_in_field(_target: isize) -> Option<String> {
+        let saved = snapshot_clipboard();
+        let before = clipboard_seq();
+        wait_for_modifiers_released(Duration::from_millis(150));
+        send_ctrl_combo(VK_A);
+        sleep(Duration::from_millis(35));
+        send_ctrl_combo(VK_C);
+
+        let start = Instant::now();
+        let mut changed = false;
+        while start.elapsed() < Duration::from_millis(280) {
+            if clipboard_seq() != before {
+                changed = true;
+                break;
+            }
+            sleep(Duration::from_millis(4));
+        }
+
+        let mut text = None;
+        if changed {
+            sleep(Duration::from_millis(15));
+            for _ in 0..10 {
+                if let Ok(mut cb) = arboard::Clipboard::new() {
+                    if let Ok(t) = cb.get_text() {
+                        text = Some(t);
+                        break;
+                    }
+                }
+                sleep(Duration::from_millis(15));
+            }
+            restore_clipboard(saved);
+        }
+        text.filter(|t| !t.trim().is_empty())
+    }
+
+    fn capture_selection_with_timeout(target: isize, timeout: Duration) -> Option<String> {
         let saved = snapshot_clipboard();
         let before = clipboard_seq();
         // Most people let go of the shortcut within ~100 ms. Don't wait longer:
         // send_ctrl_combo releases any modifier that's still held.
         wait_for_modifiers_released(Duration::from_millis(150));
-        let copy_key = if is_terminal(target) { VK_INSERT } else { VK_C };
+        let copy_key = if is_terminal_window(target) { VK_INSERT } else { VK_C };
         send_ctrl_combo(copy_key);
 
         // Apps answer a copy within a few dozen ms; when nothing is selected
         // the clipboard never changes, so this timeout is the "no selection" cost.
         let start = Instant::now();
         let mut changed = false;
-        while start.elapsed() < Duration::from_millis(350) {
+        while start.elapsed() < timeout {
             if clipboard_seq() != before {
                 changed = true;
                 break;
@@ -361,14 +430,14 @@ mod imp {
         if changed {
             // Give the source app a moment to finish writing all formats.
             sleep(Duration::from_millis(15));
-            for _ in 0..5 {
+            for _ in 0..10 {
                 if let Ok(mut cb) = arboard::Clipboard::new() {
                     if let Ok(t) = cb.get_text() {
                         text = Some(t);
                         break;
                     }
                 }
-                sleep(Duration::from_millis(20));
+                sleep(Duration::from_millis(15));
             }
             restore_clipboard(saved);
         }
@@ -483,6 +552,41 @@ mod imp {
         }
     }
 
+    /// DPI scale factor of the monitor containing a point (e.g. 1.0, 1.25, 1.5).
+    pub fn monitor_scale_at(x: i32, y: i32) -> Option<f64> {
+        unsafe {
+            let mon = MonitorFromPoint(POINT { x, y }, MONITOR_DEFAULTTONEAREST);
+            extern "system" {
+                fn LoadLibraryW(lpLibFileName: *const u16) -> isize;
+                fn GetProcAddress(hModule: isize, lpProcName: *const u8) -> *const core::ffi::c_void;
+            }
+            let dll: Vec<u16> = "shcore.dll\0".encode_utf16().collect();
+            let shcore = LoadLibraryW(dll.as_ptr());
+            if shcore == 0 {
+                return None;
+            }
+            let proc = GetProcAddress(shcore, b"GetDpiForMonitor\0".as_ptr());
+            if proc.is_null() {
+                return None;
+            }
+            type FnGetDpiForMonitor = unsafe extern "system" fn(
+                hmonitor: *mut core::ffi::c_void,
+                dpi_type: i32,
+                dpi_x: *mut u32,
+                dpi_y: *mut u32,
+            ) -> i32;
+            let get_dpi: FnGetDpiForMonitor = std::mem::transmute(proc);
+            let mut dpi_x = 0u32;
+            let mut dpi_y = 0u32;
+            // MDT_EFFECTIVE_DPI = 0
+            if get_dpi(mon.0, 0, &mut dpi_x, &mut dpi_y) == 0 && dpi_x > 0 {
+                Some(dpi_x as f64 / 96.0)
+            } else {
+                None
+            }
+        }
+    }
+
     /// Make a window never take focus when shown or clicked (used for the
     /// progress toast so the user's app keeps the keyboard).
     pub fn set_no_activate(raw: isize, on: bool) {
@@ -497,35 +601,112 @@ mod imp {
         }
     }
 
-    /// Keep a window out of Alt+Tab and the taskbar.
-    pub fn make_tool_window(raw: isize) {
-        unsafe {
-            let h = hwnd(raw);
-            let ex = GetWindowLongPtrW(h, GWL_EXSTYLE);
-            let new = (ex | WS_EX_TOOLWINDOW.0 as isize) & !(WS_EX_APPWINDOW.0 as isize);
-            if new != ex {
-                SetWindowLongPtrW(h, GWL_EXSTYLE, new);
+    static POPUP_ORIG_WNDPROC: std::sync::atomic::AtomicIsize =
+        std::sync::atomic::AtomicIsize::new(0);
+
+    unsafe extern "system" fn popup_wndproc(
+        h: HWND,
+        msg: u32,
+        wparam: WPARAM,
+        lparam: LPARAM,
+    ) -> LRESULT {
+        match msg {
+            // Never let DefWindowProc paint a classic Win32 title bar or border.
+            WM_NCPAINT => return LRESULT(0),
+            // Clear the GDI surface to transparent black (0x00000000) so no
+            // stale pixels show through the transparent margin around the card.
+            WM_ERASEBKGND => {
+                let hdc = HDC(wparam.0 as *mut core::ffi::c_void);
+                let mut rc = RECT::default();
+                if GetClientRect(h, &mut rc).is_ok() {
+                    let _ = PatBlt(hdc, 0, 0, rc.right - rc.left, rc.bottom - rc.top, BLACKNESS);
+                }
+                return LRESULT(1);
             }
+            _ => {}
         }
+        let orig = POPUP_ORIG_WNDPROC.load(std::sync::atomic::Ordering::SeqCst);
+        let prev: WNDPROC = if orig != 0 {
+            Some(std::mem::transmute::<
+                isize,
+                unsafe extern "system" fn(HWND, u32, WPARAM, LPARAM) -> LRESULT,
+            >(orig))
+        } else {
+            None
+        };
+        // Passing lParam = -1 on WM_NCACTIVATE tells DefWindowProc not to
+        // repaint the non-client title bar while still letting Tao track
+        // activation / focus loss.
+        let lp = if msg == WM_NCACTIVATE { LPARAM(-1) } else { lparam };
+        CallWindowProcW(prev, h, msg, wparam, lp)
     }
 
-    /// Disable native Windows DWM drop shadow and corner rounding on a window.
-    pub fn remove_window_shadow(raw: isize) {
+    /// Configure the popup as a pure frameless WS_POPUP tool window with no
+    /// caption, no classic border, and no Windows 11 DWM drop shadow or corner
+    /// rounding. Calling this once while hidden (and showing/hiding via raw
+    /// Win32 ShowWindow instead of Tao's set_visible) keeps Tao from
+    /// re-applying WS_CAPTION and flashing an old window frame.
+    pub fn configure_popup_window(raw: isize) {
         if raw == 0 {
             return;
         }
         unsafe {
             let h = hwnd(raw);
+
+            let ours = popup_wndproc as *const () as isize;
+            let cur = GetWindowLongPtrW(h, GWLP_WNDPROC);
+            if cur != 0 && cur != ours {
+                POPUP_ORIG_WNDPROC.store(cur, std::sync::atomic::Ordering::SeqCst);
+                let prev = SetWindowLongPtrW(h, GWLP_WNDPROC, ours);
+                if prev != 0 && prev != ours {
+                    POPUP_ORIG_WNDPROC.store(prev, std::sync::atomic::Ordering::SeqCst);
+                }
+            }
+
+            let mut changed = false;
+
+            let style = GetWindowLongPtrW(h, GWL_STYLE);
+            let strip_style = (WS_CAPTION.0
+                | WS_THICKFRAME.0
+                | WS_SYSMENU.0
+                | WS_BORDER.0
+                | WS_DLGFRAME.0
+                | WS_MINIMIZEBOX.0
+                | WS_MAXIMIZEBOX.0) as isize;
+            let add_style = (WS_POPUP.0 | WS_CLIPSIBLINGS.0 | WS_CLIPCHILDREN.0) as isize;
+            let new_style = (style & !strip_style) | add_style;
+            if new_style != style {
+                SetWindowLongPtrW(h, GWL_STYLE, new_style);
+                changed = true;
+            }
+
+            let ex = GetWindowLongPtrW(h, GWL_EXSTYLE);
+            let strip_ex = (WS_EX_WINDOWEDGE.0
+                | WS_EX_DLGMODALFRAME.0
+                | WS_EX_CLIENTEDGE.0
+                | WS_EX_APPWINDOW.0) as isize;
+            let add_ex = (WS_EX_TOOLWINDOW.0 | WS_EX_TOPMOST.0) as isize;
+            let new_ex = (ex & !strip_ex) | add_ex;
+            if new_ex != ex {
+                SetWindowLongPtrW(h, GWL_EXSTYLE, new_ex);
+                changed = true;
+            }
+
+            if !changed {
+                return;
+            }
+
+            // Prevent Windows 11 from rounding or clipping the transparent HWND corners.
+            // Do NOT set DWMWA_NCRENDERING_POLICY = DWMNCRP_DISABLED here, as that
+            // causes Windows to flash a classic non-client border frame.
             extern "system" {
                 fn LoadLibraryW(lpLibFileName: *const u16) -> isize;
                 fn GetProcAddress(hModule: isize, lpProcName: *const u8) -> *const core::ffi::c_void;
             }
-
             let dll: Vec<u16> = "dwmapi.dll\0".encode_utf16().collect();
             let dwm = LoadLibraryW(dll.as_ptr());
             if dwm != 0 {
-                let func_name = b"DwmSetWindowAttribute\0";
-                let proc = GetProcAddress(dwm, func_name.as_ptr());
+                let proc = GetProcAddress(dwm, b"DwmSetWindowAttribute\0".as_ptr());
                 if !proc.is_null() {
                     type FnDwmSetWindowAttribute = unsafe extern "system" fn(
                         hwnd: HWND,
@@ -534,16 +715,6 @@ mod imp {
                         cb_attribute: u32,
                     ) -> i32;
                     let set_attr: FnDwmSetWindowAttribute = std::mem::transmute(proc);
-
-                    // DWMWA_NCRENDERING_POLICY = 2, DWMNCRP_DISABLED = 1
-                    let policy: i32 = 1;
-                    let _ = set_attr(
-                        h,
-                        2,
-                        &policy as *const i32 as *const core::ffi::c_void,
-                        std::mem::size_of::<i32>() as u32,
-                    );
-
                     // DWMWA_WINDOW_CORNER_PREFERENCE = 33, DWMWCP_DONOTROUND = 1
                     let corner: i32 = 1;
                     let _ = set_attr(
@@ -554,6 +725,27 @@ mod imp {
                     );
                 }
             }
+
+            let _ = SetWindowPos(
+                h,
+                Some(HWND_TOPMOST),
+                0,
+                0,
+                0,
+                0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED,
+            );
+        }
+    }
+
+    pub fn show_window(raw: isize) {
+        if raw == 0 {
+            return;
+        }
+        unsafe {
+            let h = hwnd(raw);
+            let _ = ShowWindow(h, SW_SHOW);
+            let _ = SetWindowPos(h, Some(HWND_TOPMOST), 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
         }
     }
 
@@ -624,15 +816,87 @@ impl EditableCheck {
         Self { target, started: Instant::now(), rx }
     }
 
-    pub fn wait(self) -> bool {
+    /// Returns `(editable_for_paste, active_input)`.
+    /// - `editable_for_paste`: defaults to `true` when UIA cannot tell, so
+    ///   in-place pasting still works in custom/canvas editors when text is selected.
+    /// - `active_input`: only `true` when UIA positively confirms an editable
+    ///   text control (or Win32 reports a live caret), so we never send Ctrl+A
+    ///   outside an active text field.
+    pub fn wait_detailed(self) -> (bool, bool) {
         let left = Duration::from_millis(700).saturating_sub(self.started.elapsed());
         match self.rx.recv_timeout(left) {
-            Ok(Some(editable)) => editable,
-            // No UI Automation answer: fall back to the Win32 text caret.
-            Ok(None) => caret_rect(self.target).is_some(),
-            Err(_) => true,
+            Ok(Some(editable)) => (editable, editable),
+            Ok(None) | Err(_) => (true, caret_rect(self.target).is_some()),
         }
     }
+}
+
+#[cfg(windows)]
+fn variant_bool(v: &windows::Win32::System::Variant::VARIANT) -> Option<bool> {
+    use windows::Win32::System::Variant::VT_BOOL;
+    unsafe {
+        if v.Anonymous.Anonymous.vt == VT_BOOL {
+            Some(v.Anonymous.Anonymous.Anonymous.boolVal.as_bool())
+        } else {
+            None
+        }
+    }
+}
+
+#[cfg(windows)]
+unsafe fn uia_element_editable(
+    el: &windows::Win32::UI::Accessibility::IUIAutomationElement,
+) -> Option<bool> {
+    use windows::Win32::UI::Accessibility::{
+        IUIAutomationTextPattern, IUIAutomationValuePattern, UIA_DocumentControlTypeId,
+        UIA_EditControlTypeId, UIA_IsReadOnlyAttributeId, UIA_IsTextEditPatternAvailablePropertyId,
+        UIA_TextPatternId, UIA_ValuePatternId,
+    };
+
+    let kind = el.CurrentControlType().ok();
+
+    // 1. Check TextPattern's selection IsReadOnly attribute first: this is the
+    //    most accurate signal across browsers, rich editors, Word, Win11 Notepad,
+    //    and PDF viewers.
+    if let Ok(tp) = el.GetCurrentPatternAs::<IUIAutomationTextPattern>(UIA_TextPatternId) {
+        if let Ok(sel) = tp.GetSelection() {
+            if sel.Length().unwrap_or(0) > 0 {
+                if let Ok(range) = sel.GetElement(0) {
+                    if let Ok(val) = range.GetAttributeValue(UIA_IsReadOnlyAttributeId) {
+                        if let Some(ro) = variant_bool(&val) {
+                            return Some(!ro);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 2. ValuePattern reports IsReadOnly for standard inputs/textareas/Win32 edits.
+    //    Skip Document controls because browsers expose the page URL as a
+    //    read-only ValuePattern even inside canvas editors like Google Docs.
+    if kind != Some(UIA_DocumentControlTypeId) {
+        if let Ok(value) = el.GetCurrentPatternAs::<IUIAutomationValuePattern>(UIA_ValuePatternId) {
+            if let Ok(ro) = value.CurrentIsReadOnly() {
+                return Some(!ro.as_bool());
+            }
+        }
+    }
+
+    // 3. Edit controls are inherently editable text inputs.
+    if kind == Some(UIA_EditControlTypeId) {
+        return Some(true);
+    }
+
+    // 4. TextEditPattern is exposed by editable text hosts (contenteditable,
+    //    RichEdit, WinUI text controls).
+    if let Ok(val) = el.GetCurrentPropertyValue(UIA_IsTextEditPatternAvailablePropertyId) {
+        if variant_bool(&val) == Some(true) {
+            return Some(true);
+        }
+    }
+
+    None
 }
 
 #[cfg(windows)]
@@ -641,26 +905,31 @@ fn uia_focus_editable() -> Option<bool> {
         CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED,
     };
     use windows::Win32::UI::Accessibility::{
-        CUIAutomation, IUIAutomation, IUIAutomationValuePattern, UIA_ComboBoxControlTypeId,
-        UIA_EditControlTypeId, UIA_ValuePatternId,
+        CUIAutomation, IUIAutomation, UIA_WindowControlTypeId,
     };
     unsafe {
         let initialized = CoInitializeEx(None, COINIT_MULTITHREADED).is_ok();
         let result = (|| -> windows::core::Result<Option<bool>> {
             let uia: IUIAutomation = CoCreateInstance(&CUIAutomation, None, CLSCTX_INPROC_SERVER)?;
-            let el = uia.GetFocusedElement()?;
-            // Text fields (including rich editors in browsers) report whether
-            // they are read-only through the Value pattern.
-            if let Ok(value) = el.GetCurrentPatternAs::<IUIAutomationValuePattern>(UIA_ValuePatternId) {
-                return Ok(Some(!value.CurrentIsReadOnly()?.as_bool()));
+            let mut cur = uia.GetFocusedElement()?;
+            if let Some(editable) = uia_element_editable(&cur) {
+                return Ok(Some(editable));
             }
-            let kind = el.CurrentControlType()?;
-            if kind == UIA_EditControlTypeId || kind == UIA_ComboBoxControlTypeId {
-                return Ok(Some(true));
+            // Focus can land on a child text/paragraph node inside an editable
+            // contenteditable container or inside a read-only document; walk up
+            // a few ancestors to find the enclosing text host.
+            if let Ok(walker) = uia.ControlViewWalker() {
+                for _ in 0..4 {
+                    let Ok(parent) = walker.GetParentElement(&cur) else { break };
+                    if parent.CurrentControlType().ok() == Some(UIA_WindowControlTypeId) {
+                        break;
+                    }
+                    if let Some(editable) = uia_element_editable(&parent) {
+                        return Ok(Some(editable));
+                    }
+                    cur = parent;
+                }
             }
-            // A document without a Value pattern could be an editor (Word) or a
-            // page you're reading (a browser); something else (a pane, page
-            // text) is unknown too. The caller decides from the text caret.
             Ok(None)
         })();
         if initialized {
@@ -676,7 +945,11 @@ mod imp_other {
     pub fn foreground_window() -> isize { 0 }
     pub fn is_own_window(_: isize) -> bool { false }
     pub fn window_exe(_: isize) -> Option<String> { None }
+    pub fn is_terminal_window(_: isize) -> bool { false }
+    pub fn last_input_tick() -> u32 { 0 }
     pub fn capture_selection(_: isize) -> Option<String> { None }
+    pub fn verify_selection(_: isize) -> Option<String> { None }
+    pub fn capture_all_in_field(_: isize) -> Option<String> { None }
     pub fn focus_window(_: isize) -> bool { false }
     pub fn paste_into(_: isize, _: &str) -> Result<(), String> {
         Err("Pasting into other apps is only supported on Windows for now.".into())
@@ -684,15 +957,16 @@ mod imp_other {
     pub fn caret_rect(_: isize) -> Option<(i32, i32, i32, i32)> { None }
     pub fn cursor_pos() -> (i32, i32) { (200, 200) }
     pub fn work_area_at(_: i32, _: i32) -> (i32, i32, i32, i32) { (0, 0, 1440, 900) }
+    pub fn monitor_scale_at(_: i32, _: i32) -> Option<f64> { None }
     pub fn set_no_activate(_: isize, _: bool) {}
-    pub fn make_tool_window(_: isize) {}
-    pub fn remove_window_shadow(_: isize) {}
+    pub fn configure_popup_window(_: isize) {}
+    pub fn show_window(_: isize) {}
     pub fn hide_window(_: isize) {}
     pub fn set_bounds(_: isize, _: i32, _: i32, _: i32, _: i32) {}
     pub struct EditableCheck;
     impl EditableCheck {
         pub fn start(_: isize) -> Self { EditableCheck }
-        pub fn wait(self) -> bool { true }
+        pub fn wait_detailed(self) -> (bool, bool) { (true, false) }
     }
     pub fn show_no_activate(_: isize) {}
 }

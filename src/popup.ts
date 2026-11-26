@@ -44,7 +44,22 @@ function measure(): { w: number; h: number } {
   return { w: Math.ceil(r.width) + 24, h: Math.ceil(r.height) + 24 };
 }
 
+function waitForPaint(): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = window.setTimeout(resolve, 35);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        window.clearTimeout(timer);
+        resolve();
+      });
+    });
+  });
+}
+
 async function present(id: number, focus: boolean, placement: "menu" | "toast" = "menu") {
+  lastSize = measure();
+  await waitForPaint();
+  if (!root.firstElementChild) return;
   const size = measure();
   lastSize = size;
   await api.popupPresent(id, size.w, size.h, focus, placement);
@@ -63,7 +78,7 @@ function enterClass(): string {
 }
 
 new ResizeObserver(() => {
-  if (gripDragging) return;
+  if (gripDragging || !root.firstElementChild) return;
   const size = measure();
   if (size.w !== lastSize.w || size.h !== lastSize.h) {
     lastSize = size;
@@ -617,6 +632,12 @@ window.addEventListener("keydown", (e) => {
 void listen<OpenPayload>("popup-open", (e) => openMenu(e.payload));
 void listen<ToastPayload>("toast", (e) => showToast(e.payload));
 void listen<GenEvent>("gen", (e) => onGen(e.payload));
+void listen("popup-clear", () => {
+  gen = null;
+  lastToastState = null;
+  lastSize = { w: 0, h: 0 };
+  root.innerHTML = "";
+});
 
 // If a request arrived before this page finished loading, pick it up now.
 void api.popupSync().then((p) => {

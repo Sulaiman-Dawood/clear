@@ -108,13 +108,9 @@ pub fn anchor_for(target: isize) -> Anchor {
 /// Returns true when it was placed above the anchor.
 pub fn place(win: &WebviewWindow, anchor: Anchor, width: f64, height: f64) -> bool {
     let (left, top, right, bottom) = winsys::work_area_at(anchor.x, anchor.bottom);
-    // Move onto the right monitor first so the DPI scale is correct.
-    let _ = win.set_position(PhysicalPosition::new(
-        anchor.x.clamp(left, right - 1),
-        anchor.bottom.clamp(top, bottom - 1),
-    ));
-    let _ = win.set_size(LogicalSize::new(width, height));
-    let scale = win.scale_factor().unwrap_or(1.0);
+    let raw = raw_hwnd(win);
+    let scale = winsys::monitor_scale_at(anchor.x, anchor.bottom)
+        .unwrap_or_else(|| win.scale_factor().unwrap_or(1.0));
     let w = (width * scale).round() as i32;
     let h = (height * scale).round() as i32;
     let margin = (CARD_MARGIN * scale).round() as i32;
@@ -128,7 +124,12 @@ pub fn place(win: &WebviewWindow, anchor: Anchor, width: f64, height: f64) -> bo
     }
     x = x.clamp(left, (right - w).max(left));
     y = y.clamp(top, (bottom - h).max(top));
-    winsys::set_bounds(raw_hwnd(win), x, y, w, h);
+    if raw != 0 {
+        winsys::set_bounds(raw, x, y, w, h);
+    } else {
+        let _ = win.set_size(LogicalSize::new(width, height));
+        let _ = win.set_position(PhysicalPosition::new(x, y));
+    }
     flipped
 }
 
@@ -136,25 +137,40 @@ pub fn place(win: &WebviewWindow, anchor: Anchor, width: f64, height: f64) -> bo
 /// working on, just above the taskbar.
 pub fn place_toast(win: &WebviewWindow, anchor: Anchor, width: f64, height: f64) {
     let (left, top, right, bottom) = winsys::work_area_at(anchor.x, anchor.bottom);
-    let _ = win.set_position(PhysicalPosition::new((left + right) / 2, (top + bottom) / 2));
-    let _ = win.set_size(LogicalSize::new(width, height));
-    let scale = win.scale_factor().unwrap_or(1.0);
+    let raw = raw_hwnd(win);
+    let scale = winsys::monitor_scale_at(anchor.x, anchor.bottom)
+        .unwrap_or_else(|| win.scale_factor().unwrap_or(1.0));
     let w = (width * scale).round() as i32;
     let h = (height * scale).round() as i32;
     let x = (left + right - w) / 2;
     let y = (bottom - h - (28.0 * scale) as i32).max(top);
-    let _ = win.set_position(PhysicalPosition::new(x, y));
+    if raw != 0 {
+        winsys::set_bounds(raw, x, y, w, h);
+    } else {
+        let _ = win.set_size(LogicalSize::new(width, height));
+        let _ = win.set_position(PhysicalPosition::new(x, y));
+    }
 }
 
 pub fn show(win: &WebviewWindow, focus: bool) {
     let raw = raw_hwnd(win);
-    winsys::remove_window_shadow(raw);
+    if raw != 0 {
+        // Re-verify WS_POPUP / no-caption style before showing (Tao's queued
+        // post-create window_flags sync can re-apply WS_CAPTION after setup).
+        winsys::configure_popup_window(raw);
+    }
     if focus {
         winsys::set_no_activate(raw, false);
-        let _ = win.show();
-        let _ = win.set_focus();
-        if winsys::foreground_window() != raw {
-            winsys::focus_window(raw);
+        if raw != 0 {
+            // Show via Win32 directly so Tao doesn't re-apply WS_CAPTION and
+            // flash a classic window frame.
+            winsys::show_window(raw);
+            if winsys::foreground_window() != raw {
+                winsys::focus_window(raw);
+            }
+        } else {
+            let _ = win.show();
+            let _ = win.set_focus();
         }
     } else {
         winsys::set_no_activate(raw, true);

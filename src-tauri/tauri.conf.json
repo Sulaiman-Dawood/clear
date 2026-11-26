@@ -15,7 +15,7 @@
       {
         "label": "popup",
         "create": false,
-        "title": "Clear",
+        "title": "",
         "url": "popup.html",
         "width": 424,
         "height": 260,

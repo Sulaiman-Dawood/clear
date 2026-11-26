@@ -64,10 +64,11 @@ pub fn apply_theme(app: &tauri::AppHandle, theme: &str) {
         "dark" => Some(tauri::Theme::Dark),
         _ => None,
     };
-    for label in [popup::LABEL, "settings"] {
-        if let Some(win) = app.get_webview_window(label) {
-            let _ = win.set_theme(native);
-        }
+    // Only Settings has a native Windows title bar. Calling set_theme on the
+    // frameless transparent popup invokes Tao's DefWindowProcW(WM_NCACTIVATE)
+    // hack, which paints a classic light-blue title bar onto its GDI surface.
+    if let Some(win) = app.get_webview_window("settings") {
+        let _ = win.set_theme(native);
     }
     let _ = app.emit("theme-changed", theme.to_string());
 }
@@ -127,9 +128,7 @@ pub fn run() {
             for window in app.config().app.windows.clone() {
                 let built = tauri::WebviewWindowBuilder::from_config(app.handle(), &window)?.build()?;
                 if window.label == popup::LABEL {
-                    let raw = popup::raw_hwnd(&built);
-                    winsys::make_tool_window(raw);
-                    winsys::remove_window_shadow(raw);
+                    winsys::configure_popup_window(popup::raw_hwnd(&built));
                 }
             }
 

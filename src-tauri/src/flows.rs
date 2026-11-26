@@ -139,11 +139,15 @@ pub fn hide_popup(app: &AppHandle) {
         p.presented = false;
     }
     if let Some(win) = popup::window(app) {
-        let _ = win.hide();
-        // The toast is shown with a raw Win32 call that Tauri doesn't track,
-        // so hide it the same way too.
-        winsys::hide_window(popup::raw_hwnd(&win));
+        let raw = popup::raw_hwnd(&win);
+        if raw != 0 {
+            // Hide via Win32 directly so Tao doesn't re-apply window styles.
+            winsys::hide_window(raw);
+        } else {
+            let _ = win.hide();
+        }
     }
+    let _ = app.emit_to(popup::LABEL, "popup-clear", ());
 }
 
 pub fn cancel_generation(app: &AppHandle) {
@@ -208,9 +212,17 @@ pub fn open_menu_with(app: &AppHandle, capture: bool, autorun: Option<AutoRun>) 
         let reading = capture && target != 0;
         // Ask whether the field is editable while the selection is copied.
         let editable_check = (target != 0).then(|| winsys::EditableCheck::start(target));
-        let text = if reading { winsys::capture_selection(target) } else { None };
+        let mut text = if reading { winsys::capture_selection(target) } else { None };
+        let (editable, active_input) = match editable_check {
+            Some(c) => c.wait_detailed(),
+            None => (false, false),
+        };
+        // If nothing was selected and an editable input field is active, select
+        // all text in that field so any action can operate on it directly.
+        if reading && text.is_none() && active_input && !winsys::is_terminal_window(target) {
+            text = winsys::capture_all_in_field(target);
+        }
         let copied_at = started.elapsed();
-        let editable = editable_check.is_some_and(|c| c.wait());
         state.busy.store(false, Ordering::SeqCst);
         log_timing("menu", started, copied_at);
 
@@ -397,9 +409,15 @@ pub fn run_direct(app: &AppHandle, action: &str) {
         }
         // Ask whether the field is editable while the selection is copied.
         let editable_check = winsys::EditableCheck::start(fg);
-        let captured = winsys::capture_selection(fg);
+        let mut captured = winsys::capture_selection(fg);
+        let (editable, active_input) = editable_check.wait_detailed();
+        // If nothing was selected and an editable input field is active, select
+        // all text in that field so the shortcut operates on all of it.
+        if captured.is_none() && active_input && !winsys::is_terminal_window(fg) {
+            captured = winsys::capture_all_in_field(fg);
+        }
+        let input_after_copy = winsys::last_input_tick();
         let copied_at = started.elapsed();
-        let editable = editable_check.wait();
         log_timing("shortcut", started, copied_at);
         let Some(text) = captured else {
             show_toast(&app, "error", "Select some text first, then press the shortcut.");
@@ -454,10 +472,17 @@ pub fn run_direct(app: &AppHandle, action: &str) {
             Ok(out) => {
                 let cleaned = actions::clean_output(&text, &out);
                 // Only paste if the user is still where they were, with the
-                // same text selected. Otherwise pasting would land in the
-                // wrong place, so show the result in the popup instead.
-                let still_there = winsys::foreground_window() == fg
-                    && winsys::capture_selection(fg).is_some_and(|now| same_text(&now, &text));
+                // same text selected. If they never touched the keyboard/mouse
+                // after the copy (or it's a terminal that clears selection on
+                // copy), skip the second Ctrl+C so flaky re-copying never
+                // bounces an in-place edit into the popup.
+                let still_there = if winsys::foreground_window() != fg {
+                    false
+                } else if winsys::last_input_tick() == input_after_copy || winsys::is_terminal_window(fg) {
+                    true
+                } else {
+                    winsys::verify_selection(fg).is_some_and(|now| same_text(&now, &text))
+                };
                 if !still_there {
                     let note = "You moved on before it finished, so it wasn't pasted. Replace it or copy it from here.";
                     show_ready_result(&app, fg, &action, &resolved, text, cleaned, note);
